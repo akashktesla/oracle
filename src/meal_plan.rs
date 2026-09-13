@@ -1,4 +1,5 @@
 #![allow(warnings)]
+use csv::Reader;
 use std::collections::HashMap;
 use std::collections::HashSet;
 
@@ -8,28 +9,36 @@ enum Constraint {
     Ratio(usize),
 }
 
+fn load_map() -> HashMap<String, f32> {
+    let path = "/home/akash/projects/oracle/datasets/ingredients.csv";
+    let mut rdr = Reader::from_path(path).unwrap();
+    let mut map: HashMap<String, f32> = HashMap::new();
+    for result in rdr.records() {
+        let record = result.unwrap();
+        let name = record[0].trim().to_string();
+        let cpg: f32 = record[1].trim().parse().unwrap_or(0.);
+        map.insert(name, cpg);
+    }
+    println!("map: {map:?}");
+    return map;
+}
+
 pub fn main() {
-    let ingredients = HashMap::from([
-        ("rice", 3.6),
-        ("ghee", 9.),
-        ("chicken", 1.1),
-        ("mint", 1.),
-        ("tomato", 0.18),
-        ("onion", 0.4),
-    ]);
+    let ingredients = load_map();
     let imap = HashMap::from([
-        ("rice", Constraint::Ratio(1)),
-        ("chicken", Constraint::Fixed(250.)),
-        ("ghee", Constraint::Fixed(2.5)),
-        ("tomato", Constraint::Fixed(70.)),
-        ("onion", Constraint::Fixed(70.)),
-        ("mint", Constraint::Fixed(50.)),
+        ("rice".to_string(), Constraint::Ratio(1)),
+        ("chicken".to_string(), Constraint::Fixed(250.)),
+        ("ghee".to_string(), Constraint::Fixed(2.5)),
+        ("tomato".to_string(), Constraint::Fixed(70.)),
+        ("onion".to_string(), Constraint::Fixed(70.)),
+        ("mint".to_string(), Constraint::Fixed(50.)),
     ]);
     let target_calories = 1100.;
     let mut total_calories = 0.;
     let mut total_ratios = 0;
     let mut to_solve = Vec::new();
     for i in imap.keys() {
+        // let ingrt = i.to_string()
         println!("i: {i:?}");
         let constraint = imap[i].clone();
         if let Constraint::Fixed(val) = imap[i] {
@@ -50,7 +59,7 @@ pub fn main() {
             continue;
         };
         let cpg = ingredients[i];
-        let amount = ((ratio as f32 / total_ratios as f32) * remaining_cals as f32)/cpg;
+        let amount = ((ratio as f32 / total_ratios as f32) * remaining_cals as f32) / cpg;
         println!("{i}: {amount:?}");
     }
 }
