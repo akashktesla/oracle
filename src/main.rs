@@ -107,7 +107,13 @@ impl Tui {
             .title(" New Meal ")
             .title_alignment(Alignment::Center)
             .borders(Borders::ALL);
-        frame.render_widget(outer_block, outer_area)
+        let inner_area = outer_block.inner(frame.area());
+        frame.render_widget(outer_block, outer_area);
+        let input_area = Layout::vertical([
+            Constraint::Percentage(10),
+        ]).split(inner_area);
+        let input1 = TextInput::new("Meal Name".to_string());
+        input1.render(frame,input_area[0]);
     }
 
     fn handle_events(&mut self) {
@@ -159,6 +165,46 @@ impl Tui {
         }
     }
 }
+
+struct TextInput{
+    value: String,
+    is_focused: bool,
+    title: String,
+    cursor_pos:usize,
+}
+
+impl TextInput{
+    fn new(title:String)->Self{
+        TextInput{
+            value: String::new(),
+            title,
+            is_focused: false,
+            cursor_pos: 0,
+        }
+    }
+    fn render(&self,frame: &mut Frame,area: Rect){
+        let outer_block = Block::default()
+            .title(self.title.clone())
+            .title_alignment(Alignment::Center)
+            .borders(Borders::ALL);
+        // frame.render_widget(outer_block, area);
+        let input_widget = Paragraph::new(self.value.as_str()).block(outer_block);
+        frame.render_widget(input_widget,area);
+    }
+    fn handle_key_event(&mut self,key_event: KeyEvent){
+        // if !self.is_focused{
+        //     return 
+        // }
+        match key_event.code{
+            KeyCode::Char(c) => {
+                self.value.insert(self.cursor_pos,c);
+                self.cursor_pos +=1;
+            }
+            _=>{}
+        };
+    }
+}
+
 
 fn center_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
     let vertical = Layout::vertical([
