@@ -24,9 +24,25 @@ enum Screen {
     NewMeal,
 }
 
+#[derive(PartialEq)]
+enum Mode {
+    Command,
+    Insert,
+}
+
+fn mode_to_str(mode:&Mode)->&str{
+    match mode{
+        Mode::Command => return "Command",
+        Mode::Insert => return "Insert",
+        _ => return ""
+    }
+}
+
 struct Tui {
     state: usize,
     screen: Screen,
+    new_meal: NewMeal,
+    mode: Mode,
     exit: bool,
 }
 
@@ -36,6 +52,8 @@ impl Tui {
             state: 0,
             screen: Screen::Menu,
             exit: false,
+            mode: Mode::Command,
+            new_meal: NewMeal::new(),
         };
     }
     pub fn run(&mut self, terminal: &mut DefaultTerminal) {
@@ -55,6 +73,7 @@ impl Tui {
     fn render_menu(&self, frame: &mut Frame) {
         let outer_area = frame.area();
         let instructions = Line::from(vec![
+            format!(" {} ",mode_to_str(&self.mode)).into(),
             " Down ".into(),
             " <J> ".blue().bold(),
             " Up ".into(),
@@ -103,36 +122,57 @@ impl Tui {
 
     fn render_new_meal(&self, frame: &mut Frame) {
         let outer_area = frame.area();
+        let instructions = Line::from(vec![
+            format!(" {} ",mode_to_str(&self.mode)).into(),
+            " Down ".into(),
+            " <J> ".blue().bold(),
+            " Up ".into(),
+            " <K> ".blue().bold(),
+            " Quit ".into(),
+            " <Q> ".red().bold(),
+        ]);
         let outer_block = Block::default()
             .title(" New Meal ")
             .title_alignment(Alignment::Center)
+            .title_bottom(instructions)
             .borders(Borders::ALL);
         let inner_area = outer_block.inner(frame.area());
         frame.render_widget(outer_block, outer_area);
-        let input_area = Layout::vertical([
-            Constraint::Percentage(10),
-        ]).split(inner_area);
-        let input1 = TextInput::new("Meal Name".to_string());
-        input1.render(frame,input_area[0]);
+        let input_area = Layout::vertical([Constraint::Percentage(10)]).split(inner_area);
+        self.new_meal.input1.render(frame, input_area[0]);
     }
 
     fn handle_events(&mut self) {
-        match event::read() {
-            Ok(Event::Key(key_event)) if key_event.kind == KeyEventKind::Press => {
-                self.handle_key_event(key_event)
+        if let Ok(Event::Key(key_event)) = event::read()
+            && key_event.kind == KeyEventKind::Press
+        {
+            if self.mode == Mode::Insert {
+                self.new_meal.handle_key_event(key_event)
             }
-            _ => {}
-        };
+            self.handle_key_event(key_event.clone());
+        }
     }
 
     fn handle_key_event(&mut self, key_event: KeyEvent) {
-        match key_event.code {
-            KeyCode::Char('q') => self.exit(),
-            KeyCode::Char('k') => self.go_up(),
-            KeyCode::Char('j') => self.go_down(),
-            KeyCode::Enter => self.enter(),
+        match self.mode {
+            Mode::Command => {
+                match key_event.code {
+                    KeyCode::Char('q') => self.exit(),
+                    KeyCode::Char('k') => self.go_up(),
+                    KeyCode::Char('j') => self.go_down(),
+                    KeyCode::Char('i') => self.mode = Mode::Insert,
+                    KeyCode::Enter => self.enter(),
+                    _ => {}
+                };
+            }
+            Mode::Insert => {
+                match key_event.code {
+                    KeyCode::Esc => self.mode = Mode::Command,
+                    _ => {}
+                };
+            }
             _ => {}
-        }
+        };
     }
 
     fn exit(&mut self) {
@@ -160,51 +200,73 @@ impl Tui {
             match self.state {
                 0 => self.screen = Screen::NewMeal,
                 2 => self.exit(),
-                _=>{}
+                _ => {}
             }
         }
     }
 }
 
-struct TextInput{
+#[derive(Default)]
+struct NewMeal {
+    input1: TextInput,
+}
+
+impl NewMeal {
+    fn new() -> Self {
+        return NewMeal {
+            input1: TextInput::new("Meal Name".to_string()),
+        };
+    }
+    fn handle_key_event(&mut self, key_event: KeyEvent) {
+        self.input1.handle_key_event(key_event)
+    }
+}
+
+#[derive(Default)]
+struct TextInput {
     value: String,
     is_focused: bool,
     title: String,
-    cursor_pos:usize,
+    cursor_pos: usize,
 }
 
-impl TextInput{
-    fn new(title:String)->Self{
-        TextInput{
+impl TextInput {
+    fn new(title: String) -> Self {
+        TextInput {
             value: String::new(),
             title,
             is_focused: false,
             cursor_pos: 0,
         }
     }
-    fn render(&self,frame: &mut Frame,area: Rect){
+    fn render(&self, frame: &mut Frame, area: Rect) {
         let outer_block = Block::default()
             .title(self.title.clone())
             .title_alignment(Alignment::Center)
             .borders(Borders::ALL);
         // frame.render_widget(outer_block, area);
         let input_widget = Paragraph::new(self.value.as_str()).block(outer_block);
-        frame.render_widget(input_widget,area);
+        frame.render_widget(input_widget, area);
     }
-    fn handle_key_event(&mut self,key_event: KeyEvent){
-        // if !self.is_focused{
-        //     return 
-        // }
-        match key_event.code{
+    fn handle_key_event(&mut self, key_event: KeyEvent) {
+        if !self.is_focused{
+            return
+        }
+        match key_event.code {
             KeyCode::Char(c) => {
-                self.value.insert(self.cursor_pos,c);
-                self.cursor_pos +=1;
+                self.value.insert(self.cursor_pos, c);
+                self.cursor_pos += 1;
             }
-            _=>{}
+            KeyCode::Backspace => {
+                if self.cursor_pos > 0{
+                    self.value.pop();
+                    self.cursor_pos -=1;
+                }
+            }
+            _ => {}
         };
     }
 }
-
 
 fn center_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
     let vertical = Layout::vertical([
@@ -212,12 +274,12 @@ fn center_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
         Constraint::Percentage(percent_y),
         Constraint::Percentage((100 - percent_y) / 2),
     ])
-    .split(r);
+        .split(r);
 
     Layout::horizontal([
         Constraint::Percentage((100 - percent_x) / 2),
         Constraint::Percentage(percent_x),
         Constraint::Percentage((100 - percent_x) / 2),
     ])
-    .split((vertical[1]))[1]
+        .split((vertical[1]))[1]
 }
