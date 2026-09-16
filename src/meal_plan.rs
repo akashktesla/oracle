@@ -4,7 +4,7 @@ use std::collections::HashMap;
 use std::collections::HashSet;
 
 #[derive(Debug, Clone)]
-enum Constraint {
+pub enum MConstraint {
     Fixed(f32),
     Ratio(usize),
 }
@@ -26,12 +26,12 @@ fn load_map() -> HashMap<String, f32> {
 pub fn main() {
     let ingredients = load_map();
     let imap = HashMap::from([
-        ("rice".to_string(), Constraint::Ratio(1)),
-        ("chicken".to_string(), Constraint::Fixed(250.)),
-        ("ghee".to_string(), Constraint::Fixed(2.5)),
-        ("tomato".to_string(), Constraint::Fixed(70.)),
-        ("onion".to_string(), Constraint::Fixed(70.)),
-        ("mint".to_string(), Constraint::Fixed(50.)),
+        ("rice".to_string(), MConstraint::Ratio(1)),
+        ("chicken".to_string(), MConstraint::Fixed(250.)),
+        ("ghee".to_string(), MConstraint::Fixed(2.5)),
+        ("tomato".to_string(), MConstraint::Fixed(70.)),
+        ("onion".to_string(), MConstraint::Fixed(70.)),
+        ("mint".to_string(), MConstraint::Fixed(50.)),
     ]);
     let target_calories = 1100.;
     let mut total_calories = 0.;
@@ -41,12 +41,12 @@ pub fn main() {
         // let ingrt = i.to_string()
         println!("i: {i:?}");
         let constraint = imap[i].clone();
-        if let Constraint::Fixed(val) = imap[i] {
+        if let MConstraint::Fixed(val) = imap[i] {
             let cpg = ingredients[i];
             let cals = val * cpg;
             total_calories += cals;
             println!("calories: {cals:?}");
-        } else if let Constraint::Ratio(ratio) = imap[i] {
+        } else if let MConstraint::Ratio(ratio) = imap[i] {
             total_ratios += ratio;
             to_solve.push(i.clone());
         }
@@ -55,7 +55,7 @@ pub fn main() {
     println!("to_solve: {to_solve:?}");
     let remaining_cals = target_calories - total_calories;
     for i in &to_solve {
-        let Constraint::Ratio(ratio) = imap[i] else {
+        let MConstraint::Ratio(ratio) = imap[i] else {
             continue;
         };
         let cpg = ingredients[i];

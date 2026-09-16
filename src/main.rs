@@ -1,9 +1,6 @@
 #![allow(warnings)]
-// use oracle::meal_plan;
-// fn main() {
-//     meal_plan::main();
-// }
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
+use oracle::meal_plan::MConstraint;
 use ratatui::{
     DefaultTerminal, Frame,
     layout::{Alignment, Constraint, Flex, Layout, Rect},
@@ -12,6 +9,7 @@ use ratatui::{
     text::{Line, Text},
     widgets::{Block, Borders, Paragraph, Widget},
 };
+use std::collections::HashMap;
 use tui_big_text::{BigText, PixelSize};
 
 pub fn main() {
@@ -30,11 +28,11 @@ enum Mode {
     Insert,
 }
 
-fn mode_to_str(mode:&Mode)->&str{
-    match mode{
+fn mode_to_str(mode: &Mode) -> &str {
+    match mode {
         Mode::Command => return "Command",
         Mode::Insert => return "Insert",
-        _ => return ""
+        _ => return "",
     }
 }
 
@@ -73,7 +71,7 @@ impl Tui {
     fn render_menu(&self, frame: &mut Frame) {
         let outer_area = frame.area();
         let instructions = Line::from(vec![
-            format!(" {} ",mode_to_str(&self.mode)).into(),
+            format!(" {} ", mode_to_str(&self.mode)).into(),
             " Down ".into(),
             " <J> ".blue().bold(),
             " Up ".into(),
@@ -120,10 +118,10 @@ impl Tui {
         }
     }
 
-    fn render_new_meal(&self, frame: &mut Frame) {
+    fn render_new_meal(&mut self, frame: &mut Frame) {
         let outer_area = frame.area();
         let instructions = Line::from(vec![
-            format!(" {} ",mode_to_str(&self.mode)).into(),
+            format!(" {} ", mode_to_str(&self.mode)).into(),
             " Down ".into(),
             " <J> ".blue().bold(),
             " Up ".into(),
@@ -138,8 +136,37 @@ impl Tui {
             .borders(Borders::ALL);
         let inner_area = outer_block.inner(frame.area());
         frame.render_widget(outer_block, outer_area);
-        let input_area = Layout::vertical([Constraint::Percentage(10)]).split(inner_area);
-        self.new_meal.input1.render(frame, input_area[0]);
+        let input_area =
+            Layout::vertical([Constraint::Length(3), Constraint::Min(0)]).split(inner_area);
+        let _h = Layout::horizontal([Constraint::Percentage(50),Constraint::Percentage(50)]).split(input_area[0]);
+        self.new_meal.inputs[0].render(frame, _h[0]);
+        self.new_meal.inputs[1].render(frame, _h[1]);
+
+        let imap = HashMap::from([
+            ("rice".to_string(), MConstraint::Ratio(1)),
+            ("chicken".to_string(), MConstraint::Fixed(250.)),
+            ("ghee".to_string(), MConstraint::Fixed(2.5)),
+            ("tomato".to_string(), MConstraint::Fixed(70.)),
+            ("onion".to_string(), MConstraint::Fixed(70.)),
+            ("mint".to_string(), MConstraint::Fixed(50.)),
+        ]);
+        let x = Layout::vertical([Constraint::Length(3); 6]).split(input_area[1]);
+        for (index, key) in imap.keys().enumerate() {
+            let y = Layout::horizontal([Constraint::Percentage(50), Constraint::Percentage(50)])
+                .split(x[index]);
+            let mut text = TextInput::new("".to_string());
+            text.value = key.to_string();
+            text.render(frame, y[0]);
+            self.new_meal.inputs.push(text);
+            let mut num = TextInput::new("".to_string());
+            if let MConstraint::Fixed(val) = imap[key] {
+                num.value = format!("F: {}", val);
+            } else if let MConstraint::Ratio(val) = imap[key] {
+                num.value = format!("R: {}", val);
+            }
+            num.render(frame, y[1]);
+            self.new_meal.inputs.push(num);
+        }
     }
 
     fn handle_events(&mut self) {
@@ -208,17 +235,19 @@ impl Tui {
 
 #[derive(Default)]
 struct NewMeal {
-    input1: TextInput,
+    inputs: Vec<TextInput>,
 }
 
 impl NewMeal {
     fn new() -> Self {
         return NewMeal {
-            input1: TextInput::new("Meal Name".to_string()),
+            inputs: vec![TextInput::new("Ingredient".to_string()),TextInput::new("Quantity".to_string())],
         };
     }
     fn handle_key_event(&mut self, key_event: KeyEvent) {
-        self.input1.handle_key_event(key_event)
+        for mut i in &mut self.inputs {
+            i.handle_key_event(key_event)
+        }
     }
 }
 
@@ -249,18 +278,18 @@ impl TextInput {
         frame.render_widget(input_widget, area);
     }
     fn handle_key_event(&mut self, key_event: KeyEvent) {
-        if !self.is_focused{
-            return
-        }
+        // if !self.is_focused{
+        //     return
+        // }
         match key_event.code {
             KeyCode::Char(c) => {
                 self.value.insert(self.cursor_pos, c);
                 self.cursor_pos += 1;
             }
             KeyCode::Backspace => {
-                if self.cursor_pos > 0{
+                if self.cursor_pos > 0 {
                     self.value.pop();
-                    self.cursor_pos -=1;
+                    self.cursor_pos -= 1;
                 }
             }
             _ => {}
@@ -274,12 +303,12 @@ fn center_rect(percent_x: u16, percent_y: u16, r: Rect) -> Rect {
         Constraint::Percentage(percent_y),
         Constraint::Percentage((100 - percent_y) / 2),
     ])
-        .split(r);
+    .split(r);
 
     Layout::horizontal([
         Constraint::Percentage((100 - percent_x) / 2),
         Constraint::Percentage(percent_x),
         Constraint::Percentage((100 - percent_x) / 2),
     ])
-        .split((vertical[1]))[1]
+    .split((vertical[1]))[1]
 }
