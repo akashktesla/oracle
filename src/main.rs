@@ -37,7 +37,8 @@ fn mode_to_str(mode: &Mode) -> &str {
 }
 
 struct Tui {
-    state: usize,
+    x: usize,
+    y: usize,
     screen: Screen,
     new_meal: NewMeal,
     mode: Mode,
@@ -47,7 +48,8 @@ struct Tui {
 impl Tui {
     fn new() -> Self {
         return Tui {
-            state: 0,
+            x: 0,
+            y: 0,
             screen: Screen::Menu,
             exit: false,
             mode: Mode::Command,
@@ -104,7 +106,7 @@ impl Tui {
         for (i, item) in items.iter().enumerate() {
             let card_area = menu_items_area[i];
             let mut style = Style::default();
-            if i == self.state {
+            if i == self.x{
                 style = Style::default().fg(Color::Rgb(200, 0, 0));
             }
             let big = BigText::builder()
@@ -211,20 +213,26 @@ impl Tui {
     }
 
     fn go_up(&mut self) {
-        if self.state > 0 {
-            self.state -= 1;
+        if self.x > 0 {
+            self.x -= 1;
         }
     }
 
     fn go_down(&mut self) {
-        if self.state < 2 {
-            self.state += 1;
-        }
+        self.x += 1;
+        // if self.x < 2 {
+        //     self.x += 1;
+        // }
     }
-
+    fn go_right(&mut self){
+        self.y +=1
+    }
+    fn go_left(&mut self){
+        self.y -= 1
+    }
     fn enter(&mut self) {
         if self.screen == Screen::Menu {
-            match self.state {
+            match self.x {
                 0 => self.screen = Screen::NewMeal,
                 2 => self.exit(),
                 _ => {}
