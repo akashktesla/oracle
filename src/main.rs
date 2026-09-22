@@ -20,6 +20,7 @@ pub fn main() {
 enum Screen {
     Menu,
     NewMeal,
+    Oracle,
     SavedMeals,
 }
 
@@ -54,6 +55,7 @@ struct Tui {
     ingredients_db_error: Option<String>,
     new_meal: NewMealForm,
     saved: SavedMealsScreen,
+    oracle_decisions: OracleScreen,
     status: Option<String>,
 }
 
@@ -73,6 +75,7 @@ impl Tui {
             ingredients_db_error,
             new_meal: NewMealForm::blank(),
             saved: SavedMealsScreen::new(),
+            oracle_decisions: OracleScreen::new(),
             status: None,
         }
     }
@@ -89,6 +92,7 @@ impl Tui {
             Screen::Menu => self.render_menu(frame),
             Screen::NewMeal => self.render_new_meal(frame),
             Screen::SavedMeals => self.render_saved_meals(frame),
+            Screen::Oracle => self.render_oracle(frame),
         }
     }
 
@@ -102,7 +106,56 @@ impl Tui {
         spans.push(" <Q> ".red().bold());
         Line::from(spans)
     }
+fn render_oracle(&mut self, frame: &mut Frame) {
+        let instructions = self.instructions(vec![
+            ("Move", "J/K"),
+            ("Add", "A"),
+            ("Del", "X"),
+            ("Edit", "I"),
+            ("Decide", "Enter"),
+        ]);
+        let outer_block = Block::default()
+            .title(" Oracle ")
+            .title_bottom(instructions.centered())
+            .title_alignment(Alignment::Center)
+            .borders(Borders::ALL);
+        let inner_area = outer_block.inner(frame.area());
+        frame.render_widget(outer_block, frame.area());
 
+        let chunks = Layout::vertical([
+            Constraint::Min(3), 
+            Constraint::Length(3) // Result block
+        ])
+        .split(inner_area);
+
+        if self.oracle_decisions.rows.is_empty() {
+            frame.render_widget(
+                Paragraph::new("No options. Press A to add.")
+                    .style(Style::default().fg(Color::DarkGray)),
+                chunks[0],
+            );
+        } else {
+            let row_areas = Layout::vertical(vec![Constraint::Length(3); self.oracle_decisions.rows.len()])
+                .split(chunks[0]);
+            for (i, row) in self.oracle_decisions.rows.iter().enumerate() {
+                row.render(frame, row_areas[i], i == self.oracle_decisions.focus, self.mode);
+            }
+        }
+
+        let res_block = Block::default().title(" Result ").borders(Borders::ALL);
+        let res_inner = res_block.inner(chunks[1]);
+        frame.render_widget(res_block, chunks[1]);
+        
+        if let Some(res) = &self.oracle_decisions.result {
+            let msg = if res.trim().is_empty() { "Silence." } else { res };
+            frame.render_widget(
+                Paragraph::new(format!("Decision: {}", msg))
+                    .style(Style::default().fg(Color::Green).bold())
+                    .alignment(Alignment::Center),
+                res_inner,
+            );
+        }
+    }
 
     fn render_menu(&self, frame: &mut Frame) {
         let instructions = self.instructions(vec![("Down", "J"), ("Up", "K"), ("Select", "Enter")]);
@@ -127,7 +180,7 @@ impl Tui {
         .flex(Flex::SpaceEvenly)
         .split(menu_inner);
 
-        let items = ["New Meal", "Saved Meals", "Exit"];
+        let items = ["Oracle","New Meal","Saved Meals"];
         for (i, item) in items.iter().enumerate() {
             let card_area = menu_items_area[i];
             let style = if i == self.menu_index {
@@ -389,32 +442,43 @@ impl Tui {
             },
             Screen::NewMeal => self.handle_new_meal_command_key(key_event),
             Screen::SavedMeals => self.handle_saved_meals_command_key(key_event),
+            Screen::Oracle => self.handle_oracle_command_key(key_event),
         }
     }
-
-    fn handle_insert_key(&mut self, key_event: KeyEvent) {
+fn handle_insert_key(&mut self, key_event: KeyEvent) {
         if key_event.code == KeyCode::Esc {
             self.mode = Mode::Command;
             return;
         }
-        if self.screen == Screen::NewMeal {
-            let focus = self.new_meal.focus_target();
-            self.new_meal.route_key_to_focused(focus, key_event);
+        match self.screen {
+            Screen::NewMeal => {
+                let focus = self.new_meal.focus_target();
+                self.new_meal.route_key_to_focused(focus, key_event);
+            }
+            Screen::Oracle => {
+                if let Some(row) = self.oracle_decisions.rows.get_mut(self.oracle_decisions.focus) {
+                    row.handle_key_event(key_event);
+                }
+            }
+            _ => {}
         }
     }
 
     fn select_menu_item(&mut self) {
         match self.menu_index {
-            0 => {
+            0=>{
+                self.oracle_decisions = OracleScreen::new();
+                self.screen = Screen::Oracle;
+            }
+            1 => {
                 self.new_meal = NewMealForm::blank();
                 self.status = None;
                 self.screen = Screen::NewMeal;
             }
-            1 => {
+            2 => {
                 self.saved.refresh();
                 self.screen = Screen::SavedMeals;
             }
-            2 => self.exit = true,
             _ => {}
         }
     }
@@ -451,6 +515,49 @@ impl Tui {
                     self.new_meal.toggle_row_kind(i);
                 } else {
                     self.new_meal.solve(&self.ingredients_db);
+                }
+            }
+            _ => {}
+        }
+    }
+
+fn handle_oracle_command_key(&mut self, key_event: KeyEvent) {
+        match key_event.code {
+            KeyCode::Char('j') | KeyCode::Down => {
+                if self.oracle_decisions.focus + 1 < self.oracle_decisions.rows.len() {
+                    self.oracle_decisions.focus += 1;
+                }
+            }
+            KeyCode::Char('k') | KeyCode::Up => {
+                if self.oracle_decisions.focus > 0 {
+                    self.oracle_decisions.focus -= 1;
+                }
+            }
+            KeyCode::Char('a') => {
+                self.oracle_decisions.rows.push(TextInput::new("Option"));
+                self.oracle_decisions.focus = self.oracle_decisions.rows.len() - 1;
+            }
+            KeyCode::Char('x') => {
+                if !self.oracle_decisions.rows.is_empty() {
+                    self.oracle_decisions.rows.remove(self.oracle_decisions.focus);
+                    self.oracle_decisions.focus = self.oracle_decisions.focus.saturating_sub(1);
+                }
+            }
+            KeyCode::Char('i') => {
+                if !self.oracle_decisions.rows.is_empty() {
+                    self.mode = Mode::Insert;
+                }
+            }
+            KeyCode::Enter => {
+                let len = self.oracle_decisions.rows.len();
+                if len > 0 {
+                    // Pseudorandom selection based on system time nanoseconds
+                    let nanos = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap()
+                        .subsec_nanos();
+                    let choice = (nanos as usize) % len;
+                    self.oracle_decisions.result = Some(self.oracle_decisions.rows[choice].value.clone());
                 }
             }
             _ => {}
@@ -729,6 +836,22 @@ impl IngredientRow {
             }
         };
         IngredientRow { name, kind, value }
+    }
+}
+
+struct OracleScreen {
+    rows: Vec<TextInput>,
+    focus: usize,
+    result: Option<String>,
+}
+
+impl OracleScreen {
+    fn new() -> Self {
+        OracleScreen {
+            rows: vec![TextInput::new("Option")],
+            focus: 0,
+            result: None,
+        }
     }
 }
 
